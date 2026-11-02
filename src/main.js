@@ -8,6 +8,7 @@ import { createBottle, LAYER_BOTTLE } from './bottle.js';
 
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const STILL = /[?&]still/.test(location.search);
+const MOBILE_GPU = matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 860px)').matches;
 const ASSET = 'assets/';
 // Story progress is measured in "scene units": 0–1 covers scenes 01–02, 1–1.62 covers scene 03.
 const P02END = 1 / 2.95;
@@ -22,12 +23,13 @@ const rand = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 
 
 /* ─────────── renderer ─────────── */
 const canvas = document.getElementById('stage');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-const PR = Math.min(2, Math.max(1.5, window.devicePixelRatio || 1));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !MOBILE_GPU, powerPreference: MOBILE_GPU ? 'default' : 'high-performance' });
+const PR = MOBILE_GPU ? 1 : Math.min(2, window.devicePixelRatio || 1);
+renderer.transmissionResolutionScale = MOBILE_GPU ? 0.5 : 1;
 renderer.setPixelRatio(PR);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-const maxAniso = renderer.capabilities.getMaxAnisotropy();
+const maxAniso = Math.min(MOBILE_GPU ? 2 : 16, renderer.capabilities.getMaxAnisotropy());
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 100);
@@ -606,7 +608,7 @@ const capStudio2 = makeEnv({ walls: '#4d5a55', panels: [
 envAt(0); envAt(1);
 
 /* ─────────── post ─────────── */
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 8 }));
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: MOBILE_GPU ? 0 : 8 }));
 composer.setPixelRatio(PR);
 composer.addPass(new RenderPass(scene, camera));
 // sanitize HDR before bloom: replaces NaN/Inf and clamps fireflies so nothing spreads into black squares
@@ -627,7 +629,7 @@ composer.addPass(new ShaderPass({
     }`,
 }));
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.22, 0.55, 1.25);
-composer.addPass(bloom);
+if (!MOBILE_GPU) composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
 /* ─────────── choreography ─────────── */
@@ -701,7 +703,7 @@ function layout() {
   vw = innerWidth; vh = innerHeight;
   const aspect = vw / vh;
   const wasMobile = MOBILE;
-  MOBILE = aspect < 0.8;
+  MOBILE = vw <= 860 || aspect < 0.8;
   if (wasMobile !== MOBILE || !keys) keys = KEYS();
   camera.aspect = aspect;
   camera.fov = MOBILE ? 34 : 24;
@@ -859,7 +861,14 @@ const clock = new THREE.Clock();
 const camLocal = new THREE.Matrix4();
 let in04Glob = 0, in05Glob = 0;
 let introT = 0, first = true, envK = -1, capStudioOn = null;
+let lastRender = 0;
 function frame() {
+  const now = performance.now();
+  if (!STILL && (document.hidden || (MOBILE_GPU && now - lastRender < 1000 / 30 - 1))) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  lastRender = now;
   const dt = Math.min(clock.getDelta(), 0.05);
   const time = clock.elapsedTime;
   introT = forced !== null ? 1 : Math.min(1, introT + dt / 2.6);
