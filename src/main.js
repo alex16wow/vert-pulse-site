@@ -608,7 +608,7 @@ const capStudio2 = makeEnv({ walls: '#4d5a55', panels: [
 envAt(0); envAt(1);
 
 /* ─────────── post ─────────── */
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: MOBILE_GPU ? 0 : 8 }));
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: MOBILE_GPU ? 2 : 8 }));
 composer.setPixelRatio(PR);
 composer.addPass(new RenderPass(scene, camera));
 // sanitize HDR before bloom: replaces NaN/Inf and clamps fireflies so nothing spreads into black squares
